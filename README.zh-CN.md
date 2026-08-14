@@ -143,7 +143,7 @@ route 接收 response 的 Codex task 里执行 disable、reload 或 route replac
 path 依然取决于本机网络。route 发生变化后应完全退出再重新打开 Codex，因为
 已经存在的 tasks 可能仍缓存旧 endpoint。
 
-实际运行这套集成时发现的两项上游 hardening 修复，目前已作为 draft PR
+实际运行这套集成时发现的两项上游 hardening 修复，目前已作为 PR
 提交：保留 Codex Desktop 排进 managed marker 内的 user-owned TOML tables
 （[codex-router #216](https://github.com/duolahypercho/codex-router/pull/216)），
 以及处理长期 HTTP/2 upstream session 被 poison 后持续失败的问题

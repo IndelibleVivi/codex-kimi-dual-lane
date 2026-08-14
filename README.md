@@ -146,7 +146,7 @@ quit and reopen Codex after a route change because existing tasks may retain the
 old endpoint.
 
 Two upstream hardening fixes discovered while operating this integration are
-currently proposed as draft pull requests: preservation of user-owned TOML
+currently proposed as pull requests: preservation of user-owned TOML
 tables that Codex Desktop parks inside managed markers
 ([codex-router #216](https://github.com/duolahypercho/codex-router/pull/216))
 and recovery from a poisoned long-lived HTTP/2 upstream session
