@@ -126,6 +126,32 @@ doctor 会检查 overlay、生成后的 gateway route、生成后的 picker cata
 
 当你准备好让 Codex 重新加载 agent 与 model metadata 时，请完全退出并重新打开 Codex。
 
+## 故障恢复：不要切断正在承载当前 task 的通道
+
+把 router lifecycle command 当成独立的 control plane。不要从仍在通过该
+route 接收 response 的 Codex task 里执行 disable、reload 或 route replacement。
+另开一个 Terminal 窗口，在 codex-router checkout 中运行它提供的正式命令：
+
+```bash
+./bin/status       # config mode、service state 与 health
+./bin/enable       # 恢复 managed route，并等待 health
+./bin/disable      # 隔离 router，把 Codex config 切回 native mode
+```
+
+如果错误 URL 中出现 `127.0.0.1:4202/_codex-router/`，优先尝试
+`./bin/enable`。`disable` 是隔离开关，不保证 Codex 仍然在线：native OpenAI
+path 依然取决于本机网络。route 发生变化后应完全退出再重新打开 Codex，因为
+已经存在的 tasks 可能仍缓存旧 endpoint。
+
+实际运行这套集成时发现的两项上游 hardening 修复，目前已作为 draft PR
+提交：保留 Codex Desktop 排进 managed marker 内的 user-owned TOML tables
+（[codex-router #216](https://github.com/duolahypercho/codex-router/pull/216)），
+以及处理长期 HTTP/2 upstream session 被 poison 后持续失败的问题
+（[codex-router #217](https://github.com/duolahypercho/codex-router/pull/217)）。
+在对应修复进入你使用的 codex-router 版本之前，每次 lifecycle change 前都应
+私下备份 `~/.codex/config.toml`；如果 restart 只能暂时清掉反复出现的
+`ERR_HTTP2_INVALID_SESSION`，那是诊断证据，不是完整修复。
+
 ## 观看 Kimi-native worker
 
 ```bash

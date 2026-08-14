@@ -41,3 +41,13 @@ Frontend skill is a useful prior, not a permanent routing law. Harness capabilit
 ## 9. A route receipt is not an agent-loop receipt
 
 A native child can reach Kimi successfully and still return an acknowledgement as its final answer before making any required tool call. Accept tool-requiring work only from tool, artifact, diff, or test evidence. One same-child follow-up is enough to distinguish a transient continuation miss; a repeated false finish is a harness failure and should move the coherent work package to the Kimi Code lane.
+
+## 10. The recovery control plane must not depend on the failing data plane
+
+Disabling a router from the Codex task currently using it can sever the only channel available to report success or repair the result. Run lifecycle commands from an independent Terminal or desktop launcher, prefer `enable` plus health verification when the loopback route is failing, and restart Codex only after the control-plane operation completes. Native mode is an isolation path, not proof that the machine can reach OpenAI directly.
+
+## 11. Marker ownership ends where foreign TOML begins
+
+A managed comment pair does not prove that every table between the markers is router-owned. Codex Desktop can rewrite the whole file and park `[desktop]`, theme, locale, plugin, or other user tables inside the provider marker. Whole-block regex deletion therefore turns a routine enable/disable into silent preference loss. Removal must recognize the exact managed table, preserve foreign table segments, and leave malformed boundaries untouched. This failure and its regression are proposed upstream in [codex-router #216](https://github.com/duolahypercho/codex-router/pull/216).
+
+Long-lived upstream transport has a similar state boundary: a destroyed HTTP/2 session can poison later requests in the same router process, producing repeated local 502 responses until restart. A restart proves process-local state was involved but does not fix the transport. The HTTP/1.1 hardening is proposed upstream in [codex-router #217](https://github.com/duolahypercho/codex-router/pull/217).
