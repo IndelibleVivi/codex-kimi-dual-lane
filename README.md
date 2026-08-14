@@ -1,5 +1,7 @@
 # Codex Kimi Dual Lane
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 An experimental, local-first collaboration kit for using Kimi K3 from Codex without pretending that Codex is always Kimi's best harness.
 
 Here, **local-first** means local orchestration, inspectable installation, credential custody in existing Codex/Kimi clients, and locally retained review artifacts. Delegated prompts, selected repository content, tool schemas, and model output still leave the machine through the configured codex-router/Kimi data plane.
