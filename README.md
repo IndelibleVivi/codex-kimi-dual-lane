@@ -68,6 +68,13 @@ Do not place OAuth credentials or API keys in this repository, agent prompts, co
 
 ## Install locally
 
+Clone the source-only repository:
+
+```bash
+git clone https://github.com/IndelibleVivi/codex-kimi-dual-lane.git
+cd codex-kimi-dual-lane
+```
+
 First inspect what would change:
 
 ```bash

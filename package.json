@@ -4,6 +4,11 @@
   "private": true,
   "description": "Local-first dual-harness collaboration kit for Codex and Kimi K3",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IndelibleVivi/codex-kimi-dual-lane.git"
+  },
+  "homepage": "https://github.com/IndelibleVivi/codex-kimi-dual-lane#readme",
   "scripts": {
     "test": "node --test tests/*.test.mjs"
   }
