@@ -21,6 +21,8 @@ SKILL_SOURCE = ROOT / "skills" / "kimi-worker"
 OVERLAY_SOURCE = ROOT / "examples" / "user-models.kimi.json"
 AGENT_INSTRUCTIONS = """Complete the bounded task assigned by the parent agent.
 Respect repository instructions, preserve unrelated work, and keep changes coherent.
+Do not return an acknowledgement of starting work as final.
+When the task requires repository inspection, edits, or verification, use the available tools and produce the required artifact before the final response.
 Run relevant verification and return a concise summary of changes, checks, and remaining risks."""
 
 
@@ -117,6 +119,7 @@ class Installer:
         self.moved_targets: list[tuple[Path, Path]] = []
         self.created_targets: list[Path] = []
         self.created_directories: list[Path] = []
+        self.overlay_changed = False
 
     def report(self, action: str, target: Path) -> None:
         prefix = "DRY-RUN" if self.args.dry_run else action
@@ -275,6 +278,8 @@ class Installer:
         if target.is_file() and target.read_bytes() == operation.content:
             self.report("UNCHANGED", target)
             return
+        if target == self.codex_home / "codex-router" / "user-models.json":
+            self.overlay_changed = True
         if target.exists() or target.is_symlink():
             self.backup(target)
         self.report("WRITE", target)
@@ -343,6 +348,11 @@ class Installer:
 
         if self.moved_targets:
             print(f"Backups: {self.backup_root}")
+        if self.overlay_changed:
+            print(
+                "PENDING: K3 256K is not live yet. Regenerate codex-router catalog/routes "
+                "and reload it only in a maintenance window, then run scripts/doctor.py."
+            )
         print("No service was restarted. Reload Codex/router only in a maintenance window.")
 
 

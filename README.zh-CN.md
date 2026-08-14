@@ -27,6 +27,8 @@
 
 无论选择哪条通道，Codex 都是 orchestrator 和验收责任方。Kimi 的输出是证据，不是自动合并的决定。
 
+成功的 route receipt 不能证明 Codex-native child 已经跑完 agent loop。对于需要 tools 的工作，只有产生预期 tool call、artifact、diff 或 test evidence 才能验收。如果 child 把“我开始了”之类的 acknowledgement 当作 final 返回，这次尝试就是失败；用同一个 child 追问一次确认后，应把整个 bounded work package 转到 Kimi Code 通道，而不是继续重复 native retry。
+
 ## 架构
 
 ```mermaid
@@ -96,13 +98,24 @@ python3 scripts/install.py --launch-agent --force
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/io.github.codex-kimi-dual-lane.plist"
 ```
 
-installer 会先对完整操作进行 preflight，创建私有的 route capability/config 文件；如果 apply 中某一步失败，它会回滚已变更的目标。它**不会**重启 Codex 或 codex-router。只有在所有正在运行的 routed task 都停止后，才应在明确的 maintenance window 中 reload；重启 loopback router 会断开仍在进行的 response stream。
+installer 会先对完整操作进行 preflight，创建私有的 route capability/config 文件；如果 apply 中某一步失败，它会回滚已变更的目标。它**不会**重启 Codex 或 codex-router。
+
+如果 installer 报告 `PENDING`，说明 overlay 已经写入磁盘，但 K3 256K **尚未在 live runtime 中生效**。此时不要选择 Desktop 里的对应模型。等所有正在运行的 routed task 都停止后，在 codex-router checkout 中运行其正式 installer，重新生成 picker catalog 与 gateway routes，并 reload 正式 service：
+
+```bash
+cd /absolute/path/to/codex-router
+./bin/install
+```
+
+请把这一步视为明确的 maintenance window：重启 loopback router 会断开仍在进行的 response stream。
 
 然后运行：
 
 ```bash
 python3 scripts/doctor.py
 ```
+
+doctor 会检查 overlay、生成后的 gateway route、生成后的 picker catalog、正式 router 进程的启动时间，以及最新的本地 256K route receipt。如果 live process 早于 overlay，或者 256K 请求漏回 OpenAI，它会直接失败；在当前 receipt 真正证明 `provider=kimi-oauth` 前，则会保持 warning。
 
 当你准备好让 Codex 重新加载 agent 与 model metadata 时，请完全退出并重新打开 Codex。
 

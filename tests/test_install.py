@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 import os
 import importlib.util
@@ -20,6 +21,11 @@ assert SPEC and SPEC.loader
 INSTALL_MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = INSTALL_MODULE
 SPEC.loader.exec_module(INSTALL_MODULE)
+DOCTOR_SPEC = importlib.util.spec_from_file_location("dual_lane_doctor", DOCTOR)
+assert DOCTOR_SPEC and DOCTOR_SPEC.loader
+DOCTOR_MODULE = importlib.util.module_from_spec(DOCTOR_SPEC)
+sys.modules[DOCTOR_SPEC.name] = DOCTOR_MODULE
+DOCTOR_SPEC.loader.exec_module(DOCTOR_MODULE)
 
 
 class InstallTest(unittest.TestCase):
@@ -62,9 +68,35 @@ class InstallTest(unittest.TestCase):
             check=False,
         )
 
+    def prepare_generated_256k_route(self) -> None:
+        state = self.codex_home / "codex-router"
+        (state / "litellm.yaml").write_text(
+            'model_list:\n  - model_name: "kimi-oauth-k3-256k"\n',
+            encoding="utf-8",
+        )
+        (state / "merged-models.json").write_text(
+            json.dumps({"models": [{"slug": "kimi-oauth/k3-256k"}]}),
+            encoding="utf-8",
+        )
+
+    def write_256k_receipt(self, provider: str, status: int) -> None:
+        (self.codex_home / "codex-router" / "usage-events.jsonl").write_text(
+            json.dumps(
+                {
+                    "at": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "model": "kimi-oauth/k3-256k",
+                    "provider": provider,
+                    "status": status,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
     def test_installs_portable_files_and_preserves_existing_overlay_models(self) -> None:
         result = self.run_installer()
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("PENDING: K3 256K is not live yet", result.stdout)
         self.assertTrue(
             (self.codex_home / "kimi-dual-lane" / "adapter" / "kimi-child-adapter.mjs").is_file()
         )
@@ -76,6 +108,7 @@ class InstallTest(unittest.TestCase):
             agent,
             r"http://127\.0\.0\.1:4213/_kimi-child/[A-Za-z0-9_-]{32,}/kimi-k3-256k/v1",
         )
+        self.assertIn("Do not return an acknowledgement of starting work as final", agent)
         self.assertNotIn("/Users/", agent)
         token = self.codex_home / "kimi-dual-lane" / "route-token"
         self.assertRegex(token.read_text().strip(), r"^[A-Za-z0-9_-]{32,}$")
@@ -127,6 +160,8 @@ class InstallTest(unittest.TestCase):
     def test_doctor_reports_an_installed_but_not_running_adapter_as_a_warning(self) -> None:
         installed = self.run_installer()
         self.assertEqual(installed.returncode, 0, installed.stderr)
+        self.prepare_generated_256k_route()
+        self.write_256k_receipt("kimi-oauth", 200)
 
         fake_bin = Path(self.temporary.name) / "bin"
         fake_bin.mkdir()
@@ -178,6 +213,55 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         checks = {item["name"]: item for item in json.loads(result.stdout)["checks"]}
         self.assertFalse(checks["worker skill"]["ok"])
+
+    def test_doctor_rejects_a_256k_receipt_that_fell_through_to_openai(self) -> None:
+        installed = self.run_installer()
+        self.assertEqual(installed.returncode, 0, installed.stderr)
+        self.prepare_generated_256k_route()
+        self.write_256k_receipt("openai", 400)
+
+        ok, required, detail = DOCTOR_MODULE.assess_256k_activation(
+            self.codex_home,
+            router_started_at=None,
+        )
+
+        self.assertFalse(ok)
+        self.assertTrue(required)
+        self.assertIn("fell through to OpenAI", detail)
+
+    def test_doctor_rejects_a_router_process_older_than_the_256k_overlay(self) -> None:
+        installed = self.run_installer()
+        self.assertEqual(installed.returncode, 0, installed.stderr)
+        self.prepare_generated_256k_route()
+        overlay = self.codex_home / "codex-router" / "user-models.json"
+
+        ok, required, detail = DOCTOR_MODULE.assess_256k_activation(
+            self.codex_home,
+            router_started_at=overlay.stat().st_mtime - 60,
+        )
+
+        self.assertFalse(ok)
+        self.assertTrue(required)
+        self.assertIn("started before", detail)
+
+    def test_doctor_accepts_a_current_kimi_oauth_256k_receipt(self) -> None:
+        installed = self.run_installer()
+        self.assertEqual(installed.returncode, 0, installed.stderr)
+        self.prepare_generated_256k_route()
+        overlay = self.codex_home / "codex-router" / "user-models.json"
+        overlay.touch()
+        self.write_256k_receipt("kimi-oauth", 200)
+        receipt = self.codex_home / "codex-router" / "usage-events.jsonl"
+        receipt.touch()
+
+        ok, required, detail = DOCTOR_MODULE.assess_256k_activation(
+            self.codex_home,
+            router_started_at=overlay.stat().st_mtime - 60,
+        )
+
+        self.assertTrue(ok)
+        self.assertTrue(required)
+        self.assertIn("provider kimi-oauth", detail)
 
     def test_rolls_back_a_replacement_when_a_later_apply_step_fails(self) -> None:
         installed = self.run_installer()

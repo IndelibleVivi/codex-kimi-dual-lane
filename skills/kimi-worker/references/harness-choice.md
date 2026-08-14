@@ -11,10 +11,13 @@
 | Bounded final output without parent trace growth | Yes | Yes with `--artifacts-dir` |
 | Human watches the exact worker session | Codex collaboration surface | `kimi vis <session-id>` |
 | Router/control-plane compatibility risk | Higher | Lower |
+| Tool-loop completion evidence | Must be verified from tool calls or artifacts | Native harness; verify artifacts normally |
 
 ## Selection rules
 
 Choose the native Codex child when the worker must use Codex-owned capabilities or when one collaboration surface materially improves coordination. A native child receives the current Codex environment, but do not assume every provider will handle every tool schema equally; keep the task bounded and verify the provider receipt.
+
+A provider receipt does not prove that the native child continued through its tool loop. If a tool-requiring task ends with only an acknowledgement or statement of intent, require actual tool/artifact evidence. One same-child follow-up may confirm the failure; a repeated false finish moves the work package to the Kimi Code lane instead of launching more native retries.
 
 Choose Kimi Code when Kimi's own harness is part of the advantage: frontend implementation rhythm, native tool loop, OAuth session, resumability, ACP/MCP support configured in Kimi, or human-visible session inspection.
 

@@ -29,6 +29,16 @@ Do not impose an arbitrary “at most one finding/change” limit. Allow the mut
 
 Avoid concurrent overlapping edits. The parent Codex agent owns final judgment, diff review, tests, and any commit or publication decision.
 
+## Detect a native false finish
+
+A successful provider receipt proves routing, not completion of the Codex-native agent loop. When a native child was asked to inspect, edit, or verify but returns only an acknowledgement or statement of intent as its final response:
+
+1. treat the task as incomplete and check whether the child produced any required tool call, artifact, diff, or test evidence;
+2. allow one concise follow-up in the same child to confirm that the missing continuation was not transient;
+3. if the child again finishes without tool evidence, stop retrying that lane and dispatch the coherent work package once through `scripts/kimi-worker` instead.
+
+Do not run the CLI replacement concurrently with the failed native child. Preserve one owner for the work package and record the native attempt as a harness failure, not as completed work.
+
 ## Run the Kimi Code lane
 
 Create a fresh private artifacts directory and dispatch from the target repository:

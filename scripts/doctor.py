@@ -2,13 +2,17 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
+from collections import deque
 from pathlib import Path
 
 
@@ -32,6 +36,133 @@ def probe(url: str) -> bool:
             return response.status == 200 and payload.get("ok") is True
     except (OSError, ValueError, urllib.error.URLError):
         return False
+
+
+def parse_elapsed(value: str) -> int:
+    days = 0
+    clock = value.strip()
+    if "-" in clock:
+        day_text, clock = clock.split("-", 1)
+        days = int(day_text)
+    parts = [int(part) for part in clock.split(":")]
+    if len(parts) == 2:
+        hours = 0
+        minutes, seconds = parts
+    elif len(parts) == 3:
+        hours, minutes, seconds = parts
+    else:
+        raise ValueError(f"unsupported process elapsed time: {value!r}")
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds
+
+
+def formal_router_started_at() -> float | None:
+    if sys.platform != "darwin":
+        return None
+    launchctl = shutil.which("launchctl")
+    ps = shutil.which("ps")
+    if not launchctl or not ps:
+        return None
+    try:
+        service = subprocess.run(
+            [launchctl, "print", f"gui/{os.getuid()}/io.github.codex-router"],
+            text=True,
+            capture_output=True,
+            timeout=2,
+            check=False,
+        )
+        match = re.search(r"^\s*pid\s*=\s*(\d+)\s*$", service.stdout, re.MULTILINE)
+        if service.returncode != 0 or not match:
+            return None
+        elapsed = subprocess.run(
+            [ps, "-p", match.group(1), "-o", "etime="],
+            text=True,
+            capture_output=True,
+            timeout=2,
+            check=False,
+        )
+        if elapsed.returncode != 0 or not elapsed.stdout.strip():
+            return None
+        return time.time() - parse_elapsed(elapsed.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def parse_event_time(value: object) -> float | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def latest_256k_receipt(path: Path) -> dict[str, object] | None:
+    if not path.is_file():
+        return None
+    try:
+        with path.open(encoding="utf-8") as handle:
+            recent = deque(handle, maxlen=4096)
+    except OSError:
+        return None
+    for line in reversed(recent):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(event, dict) and event.get("model") == "kimi-oauth/k3-256k":
+            return event
+    return None
+
+
+def assess_256k_activation(
+    codex_home: Path,
+    *,
+    router_started_at: float | None,
+) -> tuple[bool, bool, str]:
+    state = codex_home / "codex-router"
+    overlay = state / "user-models.json"
+    if not overlay.is_file():
+        return False, False, "model overlay is not installed"
+
+    overlay_mtime = overlay.stat().st_mtime
+    receipt = latest_256k_receipt(state / "usage-events.jsonl")
+    if receipt:
+        receipt_at = parse_event_time(receipt.get("at"))
+        provider = receipt.get("provider")
+        status = receipt.get("status")
+        if provider == "kimi-oauth" and receipt_at and receipt_at >= overlay_mtime - 1:
+            return (
+                True,
+                True,
+                f"current receipt reached provider kimi-oauth with status {status}",
+            )
+
+    if router_started_at is not None and router_started_at < overlay_mtime - 1:
+        return (
+            False,
+            True,
+            "formal router started before the 256K overlay; regenerate routes and reload it in a maintenance window",
+        )
+
+    if receipt:
+        receipt_at = parse_event_time(receipt.get("at"))
+        provider = receipt.get("provider")
+        current_process_receipt = router_started_at is None or (
+            receipt_at is not None and receipt_at >= router_started_at - 1
+        )
+        current_overlay_receipt = receipt_at is None or receipt_at >= overlay_mtime - 1
+        if provider != "kimi-oauth" and current_process_receipt and current_overlay_receipt:
+            return (
+                False,
+                True,
+                f"latest 256K request fell through to OpenAI instead of kimi-oauth (status {receipt.get('status')})",
+            )
+
+    return (
+        False,
+        False,
+        "router files may be current, but no current kimi-oauth 256K receipt proves the live route yet",
+    )
 
 
 def main() -> int:
@@ -99,6 +230,45 @@ def main() -> int:
         except (json.JSONDecodeError, AttributeError):
             pass
     add("256K model overlay", overlay_ok, "update-surviving user model entry", required=False)
+
+    if overlay_ok:
+        gateway = codex_home / "codex-router" / "litellm.yaml"
+        gateway_ok = gateway.is_file() and bool(
+            re.search(r'^\s*-\s*model_name:\s*["\']?kimi-oauth-k3-256k["\']?\s*$', gateway.read_text(encoding="utf-8"), re.MULTILINE)
+        )
+        add(
+            "256K generated gateway route",
+            gateway_ok,
+            "codex-router generated route; rerun its installer in a maintenance window if missing",
+        )
+
+        merged = codex_home / "codex-router" / "merged-models.json"
+        merged_ok = False
+        if merged.is_file():
+            try:
+                catalog = json.loads(merged.read_text(encoding="utf-8"))
+                merged_ok = any(
+                    model.get("slug") == "kimi-oauth/k3-256k"
+                    for model in catalog.get("models", [])
+                )
+            except (json.JSONDecodeError, AttributeError):
+                pass
+        add(
+            "256K generated picker catalog",
+            merged_ok,
+            "codex-router merged catalog entry; rerun its installer in a maintenance window if missing",
+        )
+
+        activation_ok, activation_required, activation_detail = assess_256k_activation(
+            codex_home,
+            router_started_at=formal_router_started_at(),
+        )
+        add(
+            "256K live route",
+            activation_ok,
+            activation_detail,
+            required=activation_required,
+        )
 
     running = probe(f"http://127.0.0.1:{args.port}/health")
     add("adapter health", running, "loopback /health", required=args.require_running)

@@ -27,6 +27,8 @@ The choice is deliberately not frozen. Different tasks benefit from different ha
 
 Codex remains the orchestrator and acceptance owner in both lanes. Kimi's output is evidence, not an automatic merge decision.
 
+A successful route receipt is not proof that a Codex-native child completed its agent loop. For work that requires tools, accept the child only when it produced the expected tool call, artifact, diff, or test evidence. An acknowledgement such as “I am starting” returned as the final response is a failed attempt; after one same-child confirmation, move the bounded work package to the Kimi Code lane instead of repeating native retries.
+
 ## Architecture
 
 ```mermaid
@@ -96,13 +98,24 @@ python3 scripts/install.py --launch-agent --force
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/io.github.codex-kimi-dual-lane.plist"
 ```
 
-The installer preflights the complete operation, creates private route capability/config files, and rolls back changed targets if an apply step fails. It does **not** restart Codex or codex-router. Reload only in an explicit maintenance window after active routed tasks have stopped; restarting a loopback router can disconnect an in-flight response.
+The installer preflights the complete operation, creates private route capability/config files, and rolls back changed targets if an apply step fails. It does **not** restart Codex or codex-router.
+
+If the installer reports `PENDING`, the overlay exists on disk but K3 256K is **not live yet**. Do not select its Desktop picker entry. After every active routed task has stopped, use codex-router's supported installer from its checkout to regenerate the picker catalog and gateway routes and reload the formal service:
+
+```bash
+cd /absolute/path/to/codex-router
+./bin/install
+```
+
+Treat this as an explicit maintenance window: restarting the loopback router can disconnect an in-flight response.
 
 Then run:
 
 ```bash
 python3 scripts/doctor.py
 ```
+
+The doctor checks the overlay, generated gateway route, generated picker catalog, formal router process age, and the latest local 256K route receipt. It fails when the live process predates the overlay or a 256K request fell through to OpenAI, and remains a warning until a current receipt proves `provider=kimi-oauth`.
 
 Fully quit and reopen Codex when you are ready for it to reload agent and model metadata.
 
