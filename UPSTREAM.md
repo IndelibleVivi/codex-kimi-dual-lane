@@ -21,7 +21,7 @@ here:
 - [#216 — preserve user tables inside managed config blocks](https://github.com/duolahypercho/codex-router/pull/216)
 - [#217 — force a stable HTTP/1.1 upstream transport](https://github.com/duolahypercho/codex-router/pull/217)
 
-Both links point to draft pull requests as of 2026-08-15. Their presence here
+Both links point to open pull requests as of 2026-08-15. Their presence here
 records provenance and the tested compatibility boundary; it does not claim
 that upstream has merged or released either change.
 
