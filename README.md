@@ -126,6 +126,36 @@ The doctor checks the overlay, generated gateway route, generated picker catalog
 
 Fully quit and reopen Codex when you are ready for it to reload agent and model metadata.
 
+## Recover without cutting off the active task
+
+Treat router lifecycle commands as an independent control plane. Do not disable,
+reload, or replace the loopback route from the Codex task whose response is still
+using that route. Open a separate Terminal window and run the supported commands
+from the codex-router checkout:
+
+```bash
+./bin/status       # config mode, service state, and health
+./bin/enable       # restore the managed route and wait for health
+./bin/disable      # isolate the router and return Codex config to native mode
+```
+
+If an error URL contains `127.0.0.1:4202/_codex-router/`, try `./bin/enable`
+first. `disable` is an isolation switch, not a guarantee that Codex will stay
+online: the native OpenAI path still depends on the machine's network. Fully
+quit and reopen Codex after a route change because existing tasks may retain the
+old endpoint.
+
+Two upstream hardening fixes discovered while operating this integration are
+currently proposed as draft pull requests: preservation of user-owned TOML
+tables that Codex Desktop parks inside managed markers
+([codex-router #216](https://github.com/duolahypercho/codex-router/pull/216))
+and recovery from a poisoned long-lived HTTP/2 upstream session
+([codex-router #217](https://github.com/duolahypercho/codex-router/pull/217)).
+Until the relevant fixes are merged into the codex-router version you run, keep
+a private backup of `~/.codex/config.toml` before lifecycle changes and treat a
+restart that temporarily clears repeated `ERR_HTTP2_INVALID_SESSION` failures as
+diagnostic evidence, not a complete repair.
+
 ## Watch a Kimi-native worker
 
 ```bash
