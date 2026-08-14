@@ -1,0 +1,218 @@
+#!/bin/zsh
+set -euo pipefail
+
+model="kimi-code/k3-256k"
+effort="high"
+workdir="$PWD"
+output_format="text"
+artifacts_dir=""
+resume_args=()
+resume_session=""
+continue_mode=0
+extra_skill_args=()
+add_dir_args=()
+prompt_parts=()
+
+usage() {
+  print -u2 -- 'Usage: kimi-worker [--cwd PATH] [--model MODEL] [--effort low|high|max] [--continue | --session ID] [--skills-dir PATH] [--add-dir PATH] [--json] [--artifacts-dir PATH] -- PROMPT'
+}
+
+while (( $# > 0 )); do
+  case "$1" in
+    --cwd)
+      (( $# >= 2 )) || { usage; exit 2; }
+      workdir="$2"
+      shift 2
+      ;;
+    --model)
+      (( $# >= 2 )) || { usage; exit 2; }
+      model="$2"
+      shift 2
+      ;;
+    --effort)
+      (( $# >= 2 )) || { usage; exit 2; }
+      effort="$2"
+      shift 2
+      ;;
+    --continue)
+      (( ${#resume_args[@]} == 0 )) || { print -u2 -- 'Choose only one of --continue or --session.'; exit 2; }
+      resume_args=(--continue)
+      continue_mode=1
+      shift
+      ;;
+    --session)
+      (( $# >= 2 )) || { usage; exit 2; }
+      (( ${#resume_args[@]} == 0 )) || { print -u2 -- 'Choose only one of --continue or --session.'; exit 2; }
+      resume_args=(--session "$2")
+      resume_session="$2"
+      shift 2
+      ;;
+    --skills-dir)
+      (( $# >= 2 )) || { usage; exit 2; }
+      extra_skill_args+=(--skills-dir "$2")
+      shift 2
+      ;;
+    --add-dir)
+      (( $# >= 2 )) || { usage; exit 2; }
+      add_dir_args+=(--add-dir "$2")
+      shift 2
+      ;;
+    --json)
+      output_format="stream-json"
+      shift
+      ;;
+    --artifacts-dir)
+      (( $# >= 2 )) || { usage; exit 2; }
+      artifacts_dir="$2"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      prompt_parts+=("$@")
+      break
+      ;;
+    -*)
+      print -u2 -- "Unknown option: $1"
+      usage
+      exit 2
+      ;;
+    *)
+      prompt_parts+=("$1")
+      shift
+      ;;
+  esac
+done
+
+case "$effort" in
+  low|high|max) ;;
+  *)
+    print -u2 -- "Unsupported effort: $effort"
+    exit 2
+    ;;
+esac
+
+(( ${#prompt_parts[@]} > 0 )) || { usage; exit 2; }
+[[ -d "$workdir" ]] || { print -u2 -- "Working directory does not exist: $workdir"; exit 2; }
+
+if [[ -n "$artifacts_dir" ]]; then
+  [[ "$artifacts_dir" == /* ]] || {
+    print -u2 -- '--artifacts-dir must be an absolute path.'
+    exit 2
+  }
+  if [[ -d "$artifacts_dir" && -n "$(ls -A "$artifacts_dir" 2>/dev/null)" ]]; then
+    print -u2 -- "Artifacts directory is not empty: $artifacts_dir"
+    exit 2
+  fi
+  command -v jq >/dev/null || { print -u2 -- 'jq is required with --artifacts-dir.'; exit 127; }
+  mkdir -p "$artifacts_dir"
+  output_format="stream-json"
+fi
+
+kimi_bin="${KIMI_WORKER_CLI:-$(command -v kimi || true)}"
+[[ -n "$kimi_bin" && -x "$kimi_bin" ]] || { print -u2 -- 'Kimi Code CLI not found. Set KIMI_WORKER_CLI or install kimi.'; exit 127; }
+
+kimi_code_home="${KIMI_CODE_HOME:-$HOME/.kimi-code}"
+skill_args=()
+bridge_dir="${KIMI_CODEX_SKILL_BRIDGE:-$kimi_code_home/codex-skill-bridge}"
+[[ -d "$bridge_dir" ]] && skill_args+=(--skills-dir "$bridge_dir")
+[[ -d "$kimi_code_home/skills" ]] && skill_args+=(--skills-dir "$kimi_code_home/skills")
+
+repo_root="$(git -C "$workdir" rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -n "$repo_root" ]]; then
+  [[ -d "$repo_root/.kimi-code/skills" ]] && skill_args+=(--skills-dir "$repo_root/.kimi-code/skills")
+  [[ -d "$repo_root/.agents/skills" ]] && skill_args+=(--skills-dir "$repo_root/.agents/skills")
+fi
+skill_args+=("${extra_skill_args[@]}")
+
+prompt="${(j: :)prompt_parts}"
+unset KIMI_MODEL_NAME KIMI_MODEL_API_KEY KIMI_MODEL_PROVIDER_TYPE KIMI_MODEL_BASE_URL
+unset KIMI_MODEL_MAX_CONTEXT_SIZE KIMI_MODEL_CAPABILITIES KIMI_MODEL_DISPLAY_NAME
+export KIMI_MODEL_THINKING_EFFORT="$effort"
+export KIMI_DISABLE_TELEMETRY="1"
+
+cd "$workdir"
+if [[ -z "$artifacts_dir" ]]; then
+  exec "$kimi_bin" \
+    "${resume_args[@]}" \
+    --model "$model" \
+    "${skill_args[@]}" \
+    "${add_dir_args[@]}" \
+    --prompt "$prompt" \
+    --output-format "$output_format"
+fi
+
+events_file="$artifacts_dir/events.log"
+stderr_file="$artifacts_dir/stderr.log"
+index_file="$kimi_code_home/session_index.jsonl"
+canonical_workdir="$PWD"
+started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+index_lines=0
+[[ -f "$index_file" ]] && index_lines="$(wc -l < "$index_file" | tr -d ' ')"
+
+print -r -- running > "$artifacts_dir/status"
+jq -n \
+  --arg startedAt "$started_at" \
+  --arg cwd "$canonical_workdir" \
+  --arg model "$model" \
+  --arg effort "$effort" \
+  '{startedAt:$startedAt,cwd:$cwd,model:$model,effort:$effort}' \
+  > "$artifacts_dir/metadata.json"
+
+"$kimi_bin" \
+  "${resume_args[@]}" \
+  --model "$model" \
+  "${skill_args[@]}" \
+  "${add_dir_args[@]}" \
+  --prompt "$prompt" \
+  --output-format stream-json \
+  > "$events_file" 2> "$stderr_file" &
+worker_pid=$!
+print -r -- "$worker_pid" > "$artifacts_dir/pid"
+
+session_id="$resume_session"
+for _ in {1..300}; do
+  if [[ -z "$session_id" && -f "$index_file" ]]; then
+    if (( continue_mode )); then
+      session_id="$(jq -r --arg cwd "$canonical_workdir" 'select(.workDir == $cwd) | .sessionId' "$index_file" | tail -1)"
+    else
+      session_id="$(tail -n "+$(( index_lines + 1 ))" "$index_file" 2>/dev/null | jq -r --arg cwd "$canonical_workdir" 'select(.workDir == $cwd) | .sessionId' | tail -1)"
+    fi
+  fi
+  [[ -n "$session_id" ]] && break
+  kill -0 "$worker_pid" 2>/dev/null || break
+  sleep 0.1
+done
+
+if [[ -n "$session_id" ]]; then
+  print -r -- "$session_id" > "$artifacts_dir/session-id"
+  print -r -- "kimi vis $session_id" > "$artifacts_dir/vis-command"
+  print -u2 -- "Watch this session: kimi vis $session_id"
+fi
+
+set +e
+wait "$worker_pid"
+worker_status=$?
+set -e
+
+if [[ -z "$session_id" && -f "$events_file" ]]; then
+  session_id="$(jq -Rrs '[split("\n")[] | fromjson? | select(.type == "session.resume_hint")] | last.session_id // ""' "$events_file")"
+  if [[ -n "$session_id" ]]; then
+    print -r -- "$session_id" > "$artifacts_dir/session-id"
+    print -r -- "kimi vis $session_id" > "$artifacts_dir/vis-command"
+  fi
+fi
+
+jq -Rrs \
+  '[split("\n")[] | fromjson? | select(.role == "assistant" and (.content | type) == "string")] | last.content // ""' \
+  "$events_file" > "$artifacts_dir/final.md"
+
+if (( worker_status == 0 )); then
+  print -r -- complete > "$artifacts_dir/status"
+else
+  print -r -- "failed:$worker_status" > "$artifacts_dir/status"
+fi
+exit "$worker_status"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kimi Dual-Lane Worker"
+  short_description: "Route work between Codex-native and Kimi-native lanes"
+  default_prompt: "Use $kimi-worker to choose and run the best Kimi collaboration lane for this task."

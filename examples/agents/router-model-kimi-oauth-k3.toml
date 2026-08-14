@@ -1,0 +1,13 @@
+name = "router_kimi_oauth_k3"
+description = "Kimi K3 worker through the local dual-lane adapter."
+model_provider = "codex-router"
+model = "gpt-5.6-sol"
+model_providers.codex-router.name = "Codex Router Kimi child adapter"
+model_providers.codex-router.base_url = "http://127.0.0.1:4213/_kimi-child/INSTALLATION_ROUTE_TOKEN/kimi-k3/v1"
+model_providers.codex-router.wire_api = "responses"
+
+developer_instructions = """
+Complete the bounded task assigned by the parent agent.
+Respect repository instructions and preserve unrelated work.
+Run relevant verification and return a concise summary of changes, checks, and remaining risks.
+"""
