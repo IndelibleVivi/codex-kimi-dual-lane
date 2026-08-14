@@ -7,7 +7,7 @@
 | Codex collaboration UI | Best fit | Separate session |
 | Codex plugins, MCP, Browser, or installed skills | Best fit | Parent must mediate Codex-only tools |
 | Kimi-native tool behavior | Adapted through Codex | Best fit |
-| Durable Kimi session and `kimi vis` | No | Best fit |
+| Durable Kimi session, Kimi Web history, and `kimi vis` | No | Best fit |
 | Bounded final output without parent trace growth | Yes | Yes with `--artifacts-dir` |
 | Human watches the exact worker session | Codex collaboration surface | `kimi vis <session-id>` |
 | Router/control-plane compatibility risk | Higher | Lower |

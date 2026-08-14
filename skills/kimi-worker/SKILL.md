@@ -54,9 +54,11 @@ worker="${CODEX_HOME:-$HOME/.codex}/skills/kimi-worker/scripts/kimi-worker"
 
 The wrapper reuses the official Kimi Code OAuth session and unsets Platform API overrides. It does not copy Codex OAuth or Kimi credentials.
 
+Delegated runs are ordinary durable Kimi Code sessions, not disposable worker transcripts. Normal runs use official `kimi acp` stdio and submit through `session/prompt`, so Kimi Code writes the `last_prompt`/title metadata required by Kimi Web while keeping OAuth custody, native tools, and session persistence inside Kimi. The installer places the portable Codex frontend bridge in Kimi's normal user skill root. An explicit extra `--skills-dir` uses the CLI compatibility path because ACP 0.23 cannot express that override.
+
 While Kimi works, continue useful non-overlapping parent work. If no independent work remains, use one tool-owned long wait rather than repeated short polling. Never stream the complete progress trace into the parent model context.
 
-When the session id appears, give the user the one-line command stored in `vis-command` if they want to watch. It opens the same durable session and does not create a duplicate request.
+When the session id appears, give the user the one-line command stored in `vis-command` if they want to watch. It opens the same durable session and does not create a duplicate request. Completed runs also appear in normal Kimi Web history because their prompt metadata is retained.
 
 On completion, inspect only:
 

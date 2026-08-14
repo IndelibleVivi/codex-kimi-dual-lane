@@ -9,7 +9,7 @@ Here, **local-first** means local orchestration, inspectable installation, crede
 It preserves two complementary paths:
 
 1. **Codex-native lane** — a Kimi worker runs inside Codex collaboration, with Codex-owned orchestration, instructions, tools, skills, plugins, and final review.
-2. **Kimi-native lane** — Codex dispatches the official Kimi Code CLI through the user's existing OAuth session, while the human can watch the same durable session with `kimi vis`.
+2. **Kimi-native lane** — Codex dispatches the official Kimi Code CLI through the user's existing OAuth session, while the human can watch the same durable session with `kimi vis` and reopen it from normal Kimi Web history.
 
 The choice is deliberately not frozen. Different tasks benefit from different harnesses, and both Codex and Kimi Code continue to evolve.
 
@@ -38,7 +38,7 @@ flowchart LR
     N --> A["Loopback child adapter"]
     A --> R["codex-router"]
     R --> KO["Kimi OAuth"]
-    D -->|"Kimi-native loop matters"| C["Kimi Code CLI"]
+    D -->|"Kimi-native loop matters"| C["Kimi Code ACP / CLI"]
     C --> KO
     C --> V["kimi vis: same session"]
     N --> Q["Codex review + tests"]
@@ -55,7 +55,8 @@ See [Architecture](docs/architecture.md) and [Lessons learned](docs/lessons-lear
 - official Kimi Code OAuth reuse — no Platform API key injection;
 - `kimi-oauth/k3-256k` with exact-envelope fallback to `kimi-oauth/k3`;
 - generated Codex agent roles for native collaboration;
-- a portable `kimi-worker` skill and CLI wrapper;
+- a portable `kimi-worker` skill, ACP client, and CLI compatibility wrapper;
+- a Kimi user-skill bridge to the installed Codex React/Next.js and shadcn standards;
 - bounded output artifacts: `final.md`, `status`, `session-id`, and `vis-command`;
 - synthetic adapter and installer tests.
 
@@ -85,10 +86,16 @@ First inspect what would change:
 python3 scripts/install.py --dry-run
 ```
 
-Install the skill, adapter, native agent definitions, and update-surviving 256K model overlay:
+Install the Codex worker skill, Kimi frontend bridge, adapter, native agent definitions, and update-surviving 256K model overlay:
 
 ```bash
 python3 scripts/install.py
+```
+
+To update only the Codex worker skill and Kimi frontend bridge without touching router or agent definitions:
+
+```bash
+python3 scripts/install.py --skill-only --force
 ```
 
 On macOS, also prepare the persistent LaunchAgent:
@@ -136,6 +143,10 @@ As soon as the session id is known, the wrapper prints a one-line watch command 
 ```
 
 Run that command to watch the **same** durable Kimi session. It does not create a second request. The parent agent should normally read only `status`, `final.md`, and the exact repository diff; the full mixed event stream remains in `events.log` for failure diagnosis.
+
+### Kimi Web history compatibility
+
+Kimi Code 0.36's v2 `--prompt` runner creates a real session and event log but currently skips the `last_prompt`/title metadata that Kimi Web uses to exclude empty sessions. Normal worker runs therefore use the official `kimi acp` stdio transport and submit through `session/prompt`, which records ordinary Kimi session metadata without exposing the OAuth token to the wrapper. The parent still receives only bounded artifacts. Kimi's normal user and project skill roots load automatically; an explicit extra `--skills-dir` uses the bundled CLI compatibility path because ACP 0.23 has no equivalent request field.
 
 ## Test
 

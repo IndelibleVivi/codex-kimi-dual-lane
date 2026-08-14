@@ -9,7 +9,7 @@
 本项目保留两条彼此补充的路径：
 
 1. **Codex-native 通道** — Kimi worker 在 Codex collaboration 内运行，由 Codex 负责 orchestration、instructions、tools、skills、plugins 和最终审查。
-2. **Kimi-native 通道** — Codex 通过用户现有的 OAuth session 调用官方 Kimi Code CLI，同时人类可以用 `kimi vis` 观看同一个 durable session。
+2. **Kimi-native 通道** — Codex 通过用户现有的 OAuth session 调用官方 Kimi Code CLI，同时人类可以用 `kimi vis` 观看同一个 durable session，也可以从正常的 Kimi Web 历史中重新打开它。
 
 我们有意不把选择固定下来。不同任务适合不同的 harness，而 Codex 与 Kimi Code 本身也仍在持续演进。
 
@@ -38,7 +38,7 @@ flowchart LR
     N --> A["Loopback child adapter"]
     A --> R["codex-router"]
     R --> KO["Kimi OAuth"]
-    D -->|"更需要 Kimi-native loop"| C["Kimi Code CLI"]
+    D -->|"更需要 Kimi-native loop"| C["Kimi Code ACP / CLI"]
     C --> KO
     C --> V["kimi vis：同一个 session"]
     N --> Q["Codex 审查 + 测试"]
@@ -55,7 +55,8 @@ flowchart LR
 - 复用官方 Kimi Code OAuth，不注入 Platform API key；
 - `kimi-oauth/k3-256k`，并在精确匹配的 envelope 下 fallback 到 `kimi-oauth/k3`；
 - 为 native collaboration 生成 Codex agent roles；
-- 可移植的 `kimi-worker` skill 与 CLI wrapper；
+- 可移植的 `kimi-worker` skill、ACP client 与 CLI compatibility wrapper；
+- 连接已安装 Codex React/Next.js 与 shadcn 规范的 Kimi user-skill bridge；
 - 有边界的输出 artifacts：`final.md`、`status`、`session-id` 和 `vis-command`；
 - adapter 与 installer 的 synthetic tests。
 
@@ -85,10 +86,16 @@ cd codex-kimi-dual-lane
 python3 scripts/install.py --dry-run
 ```
 
-安装 skill、adapter、native agent definitions，以及能够跨更新保留的 256K model overlay：
+安装 Codex worker skill、Kimi frontend bridge、adapter、native agent definitions，以及能够跨更新保留的 256K model overlay：
 
 ```bash
 python3 scripts/install.py
+```
+
+如果只想更新 Codex worker skill 与 Kimi frontend bridge，而不触碰 router 或 agent definitions：
+
+```bash
+python3 scripts/install.py --skill-only --force
 ```
 
 在 macOS 上，还可以准备持久运行的 LaunchAgent：
@@ -136,6 +143,10 @@ session id 一旦可用，wrapper 就会打印一行观看命令，并将它保�
 ```
 
 运行该命令即可观看**同一个** durable Kimi session，它不会创建第二个请求。parent agent 通常只需读取 `status`、`final.md` 和准确的 repo diff；完整的混合 event stream 保留在 `events.log` 中，仅用于故障诊断。
+
+### Kimi Web 历史兼容性
+
+Kimi Code 0.36 的 v2 `--prompt` runner 会创建真实的 session 和 event log，但目前不会写入 Kimi Web 用来排除空 session 的 `last_prompt`/title metadata。因此，普通 worker run 改走官方 `kimi acp` stdio transport，并通过 `session/prompt` 提交；它会写入正常的 Kimi session metadata，也不需要 wrapper 读取 OAuth token。parent 仍然只接收有边界的 artifacts。Kimi 正常的 user/project skill roots 会自动加载；ACP 0.23 没有对应的 request field，所以显式追加 `--skills-dir` 时才使用内置 CLI compatibility path。
 
 ## 测试
 

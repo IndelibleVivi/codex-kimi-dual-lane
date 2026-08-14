@@ -116,17 +116,27 @@ kimi_bin="${KIMI_WORKER_CLI:-$(command -v kimi || true)}"
 [[ -n "$kimi_bin" && -x "$kimi_bin" ]] || { print -u2 -- 'Kimi Code CLI not found. Set KIMI_WORKER_CLI or install kimi.'; exit 127; }
 
 kimi_code_home="${KIMI_CODE_HOME:-$HOME/.kimi-code}"
+script_dir="${0:A:h}"
+acp_client="$script_dir/kimi-acp-client.mjs"
+node_bin="${KIMI_WORKER_NODE:-$(command -v node || true)}"
+use_acp=1
 skill_args=()
-bridge_dir="${KIMI_CODEX_SKILL_BRIDGE:-$kimi_code_home/codex-skill-bridge}"
-[[ -d "$bridge_dir" ]] && skill_args+=(--skills-dir "$bridge_dir")
-[[ -d "$kimi_code_home/skills" ]] && skill_args+=(--skills-dir "$kimi_code_home/skills")
 
-repo_root="$(git -C "$workdir" rev-parse --show-toplevel 2>/dev/null || true)"
-if [[ -n "$repo_root" ]]; then
-  [[ -d "$repo_root/.kimi-code/skills" ]] && skill_args+=(--skills-dir "$repo_root/.kimi-code/skills")
-  [[ -d "$repo_root/.agents/skills" ]] && skill_args+=(--skills-dir "$repo_root/.agents/skills")
+# Native ACP discovers Kimi's normal user and project skill roots itself. An
+# explicit --skills-dir is a CLI-only override in Kimi Code 0.36, so preserve
+# that rare contract through the print-mode compatibility path.
+if (( ${#extra_skill_args[@]} > 0 )); then
+  use_acp=0
+  bridge_dir="${KIMI_CODEX_SKILL_BRIDGE:-$kimi_code_home/codex-skill-bridge}"
+  [[ -d "$bridge_dir" ]] && skill_args+=(--skills-dir "$bridge_dir")
+  [[ -d "$kimi_code_home/skills" ]] && skill_args+=(--skills-dir "$kimi_code_home/skills")
+  repo_root="$(git -C "$workdir" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ -n "$repo_root" ]]; then
+    [[ -d "$repo_root/.kimi-code/skills" ]] && skill_args+=(--skills-dir "$repo_root/.kimi-code/skills")
+    [[ -d "$repo_root/.agents/skills" ]] && skill_args+=(--skills-dir "$repo_root/.agents/skills")
+  fi
+  skill_args+=("${extra_skill_args[@]}")
 fi
-skill_args+=("${extra_skill_args[@]}")
 
 prompt="${(j: :)prompt_parts}"
 unset KIMI_MODEL_NAME KIMI_MODEL_API_KEY KIMI_MODEL_PROVIDER_TYPE KIMI_MODEL_BASE_URL
@@ -134,15 +144,39 @@ unset KIMI_MODEL_MAX_CONTEXT_SIZE KIMI_MODEL_CAPABILITIES KIMI_MODEL_DISPLAY_NAM
 export KIMI_MODEL_THINKING_EFFORT="$effort"
 export KIMI_DISABLE_TELEMETRY="1"
 
+runner=()
+transport="acp"
+if (( use_acp )); then
+  [[ -n "$node_bin" && -x "$node_bin" ]] || { print -u2 -- 'Node.js is required for Kimi ACP sessions. Set KIMI_WORKER_NODE or install node.'; exit 127; }
+  [[ -f "$acp_client" ]] || { print -u2 -- "Kimi ACP client not found: $acp_client"; exit 127; }
+  runner=(
+    "$node_bin" "$acp_client"
+    --cwd "$workdir"
+    --model "$model"
+    --effort "$effort"
+    "${resume_args[@]}"
+    "${add_dir_args[@]}"
+  )
+else
+  transport="cli-compat"
+  if [[ -z "${KIMI_CODE_LEGACY_FLAG+x}" ]]; then
+    export KIMI_CODE_LEGACY_FLAG="1"
+  fi
+  runner=(
+    "$kimi_bin"
+    "${resume_args[@]}"
+    --model "$model"
+    "${skill_args[@]}"
+    "${add_dir_args[@]}"
+  )
+fi
+
 cd "$workdir"
 if [[ -z "$artifacts_dir" ]]; then
-  exec "$kimi_bin" \
-    "${resume_args[@]}" \
-    --model "$model" \
-    "${skill_args[@]}" \
-    "${add_dir_args[@]}" \
-    --prompt "$prompt" \
-    --output-format "$output_format"
+  if (( use_acp )); then
+    exec "${runner[@]}" --output-format "$output_format" -- "$prompt"
+  fi
+  exec "${runner[@]}" --prompt "$prompt" --output-format "$output_format"
 fi
 
 events_file="$artifacts_dir/events.log"
@@ -151,7 +185,9 @@ index_file="$kimi_code_home/session_index.jsonl"
 canonical_workdir="$PWD"
 started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 index_lines=0
-[[ -f "$index_file" ]] && index_lines="$(wc -l < "$index_file" | tr -d ' ')"
+if (( ! use_acp )) && [[ -f "$index_file" ]]; then
+  index_lines="$(wc -l < "$index_file" | tr -d ' ')"
+fi
 
 print -r -- running > "$artifacts_dir/status"
 jq -n \
@@ -159,23 +195,30 @@ jq -n \
   --arg cwd "$canonical_workdir" \
   --arg model "$model" \
   --arg effort "$effort" \
-  '{startedAt:$startedAt,cwd:$cwd,model:$model,effort:$effort}' \
+  --arg transport "$transport" \
+  '{startedAt:$startedAt,cwd:$cwd,model:$model,effort:$effort,transport:$transport}' \
   > "$artifacts_dir/metadata.json"
 
-"$kimi_bin" \
-  "${resume_args[@]}" \
-  --model "$model" \
-  "${skill_args[@]}" \
-  "${add_dir_args[@]}" \
-  --prompt "$prompt" \
-  --output-format stream-json \
-  > "$events_file" 2> "$stderr_file" &
+if (( use_acp )); then
+  "${runner[@]}" \
+    --session-id-file "$artifacts_dir/session-id" \
+    --output-format stream-json \
+    -- "$prompt" \
+    > "$events_file" 2> "$stderr_file" &
+else
+  "${runner[@]}" \
+    --prompt "$prompt" \
+    --output-format stream-json \
+    > "$events_file" 2> "$stderr_file" &
+fi
 worker_pid=$!
 print -r -- "$worker_pid" > "$artifacts_dir/pid"
 
 session_id="$resume_session"
 for _ in {1..300}; do
-  if [[ -z "$session_id" && -f "$index_file" ]]; then
+  if [[ -z "$session_id" && -s "$artifacts_dir/session-id" ]]; then
+    session_id="$(sed -n '1p' "$artifacts_dir/session-id")"
+  elif (( ! use_acp )) && [[ -z "$session_id" && -f "$index_file" ]]; then
     if (( continue_mode )); then
       session_id="$(jq -r --arg cwd "$canonical_workdir" 'select(.workDir == $cwd) | .sessionId' "$index_file" | tail -1)"
     else
@@ -188,7 +231,7 @@ for _ in {1..300}; do
 done
 
 if [[ -n "$session_id" ]]; then
-  print -r -- "$session_id" > "$artifacts_dir/session-id"
+  [[ -s "$artifacts_dir/session-id" ]] || print -r -- "$session_id" > "$artifacts_dir/session-id"
   print -r -- "kimi vis $session_id" > "$artifacts_dir/vis-command"
   print -u2 -- "Watch this session: kimi vis $session_id"
 fi

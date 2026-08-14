@@ -32,6 +32,7 @@ class InstallTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.codex_home = Path(self.temporary.name) / ".codex"
+        self.kimi_code_home = Path(self.temporary.name) / ".kimi-code"
         self.codex_home.mkdir()
         (self.codex_home / "config.toml").write_text(
             '[model_providers.codex-router]\n'
@@ -62,7 +63,15 @@ class InstallTest(unittest.TestCase):
 
     def run_installer(self, *extra: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            [sys.executable, str(INSTALLER), "--codex-home", str(self.codex_home), *extra],
+            [
+                sys.executable,
+                str(INSTALLER),
+                "--codex-home",
+                str(self.codex_home),
+                "--kimi-code-home",
+                str(self.kimi_code_home),
+                *extra,
+            ],
             text=True,
             capture_output=True,
             check=False,
@@ -101,6 +110,14 @@ class InstallTest(unittest.TestCase):
             (self.codex_home / "kimi-dual-lane" / "adapter" / "kimi-child-adapter.mjs").is_file()
         )
         self.assertTrue((self.codex_home / "skills" / "kimi-worker" / "SKILL.md").is_file())
+        self.assertTrue(
+            (
+                self.kimi_code_home
+                / "skills"
+                / "codex-frontend-standards"
+                / "SKILL.md"
+            ).is_file()
+        )
         agent = (
             self.codex_home / "agents" / "router-model-kimi-oauth-k3-256k.toml"
         ).read_text(encoding="utf-8")
@@ -148,6 +165,21 @@ class InstallTest(unittest.TestCase):
         backups = list((self.codex_home / "backups").rglob("router-model-kimi-oauth-k3.toml"))
         self.assertEqual(len(backups), 1)
         self.assertEqual(backups[0].read_text(encoding="utf-8"), "local change\n")
+
+    def test_skill_only_does_not_touch_router_or_agent_targets(self) -> None:
+        result = self.run_installer("--skill-only")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.codex_home / "skills" / "kimi-worker" / "SKILL.md").is_file())
+        self.assertTrue(
+            (
+                self.kimi_code_home
+                / "skills"
+                / "codex-frontend-standards"
+                / "SKILL.md"
+            ).is_file()
+        )
+        self.assertFalse((self.codex_home / "kimi-dual-lane").exists())
+        self.assertFalse((self.codex_home / "agents").exists())
 
     def test_invalid_overlay_fails_preflight_before_any_install_target_is_written(self) -> None:
         overlay = self.codex_home / "codex-router" / "user-models.json"
@@ -271,7 +303,13 @@ class InstallTest(unittest.TestCase):
         adapter.write_bytes(prior)
 
         args = INSTALL_MODULE.parser().parse_args(
-            ["--codex-home", str(self.codex_home), "--force"]
+            [
+                "--codex-home",
+                str(self.codex_home),
+                "--kimi-code-home",
+                str(self.kimi_code_home),
+                "--force",
+            ]
         )
         INSTALL_MODULE.validate(args)
 

@@ -18,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ADAPTER_SOURCE = ROOT / "adapter" / "kimi-child-adapter.mjs"
 SKILL_SOURCE = ROOT / "skills" / "kimi-worker"
+KIMI_FRONTEND_SKILL_SOURCE = ROOT / "kimi-skills" / "codex-frontend-standards"
 OVERLAY_SOURCE = ROOT / "examples" / "user-models.kimi.json"
 AGENT_INSTRUCTIONS = """Complete the bounded task assigned by the parent agent.
 Respect repository instructions, preserve unrelated work, and keep changes coherent.
@@ -49,9 +50,19 @@ def parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")),
     )
+    result.add_argument(
+        "--kimi-code-home",
+        type=Path,
+        default=Path(os.environ.get("KIMI_CODE_HOME", Path.home() / ".kimi-code")),
+    )
     result.add_argument("--port", type=int, default=4213)
     result.add_argument("--control-model-256k", default="gpt-5.6-terra")
     result.add_argument("--control-model-k3", default="gpt-5.6-sol")
+    result.add_argument(
+        "--skill-only",
+        action="store_true",
+        help="Install only the Codex worker skill and Kimi frontend bridge.",
+    )
     result.add_argument(
         "--skip-model-overlay",
         action="store_true",
@@ -69,6 +80,10 @@ def parser() -> argparse.ArgumentParser:
 
 
 def validate(args: argparse.Namespace) -> None:
+    if args.skill_only:
+        if args.launch_agent:
+            raise ValueError("--skill-only cannot be combined with --launch-agent")
+        return
     if args.port < 1 or args.port > 65535:
         raise ValueError("--port must be between 1 and 65535")
     config = args.codex_home.expanduser() / "config.toml"
@@ -112,6 +127,7 @@ class Installer:
     def __init__(self, args: argparse.Namespace):
         self.args = args
         self.codex_home = args.codex_home.expanduser().resolve()
+        self.kimi_code_home = args.kimi_code_home.expanduser().resolve()
         stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         self.backup_root = self.codex_home / "backups" / f"kimi-dual-lane-{stamp}"
         self.file_operations: list[FileOperation] = []
@@ -188,12 +204,28 @@ class Installer:
         return plist_path, plistlib.dumps(payload, fmt=plistlib.FMT_XML, sort_keys=False)
 
     def build_plan(self) -> None:
-        for source in (ADAPTER_SOURCE, OVERLAY_SOURCE, SKILL_SOURCE / "SKILL.md"):
+        for source in (
+            ADAPTER_SOURCE,
+            OVERLAY_SOURCE,
+            SKILL_SOURCE / "SKILL.md",
+            KIMI_FRONTEND_SKILL_SOURCE / "SKILL.md",
+        ):
             if not source.is_file():
                 raise ValueError(f"required source is missing: {source}")
         wrapper = SKILL_SOURCE / "scripts" / "kimi-worker"
         if not wrapper.is_file():
             raise ValueError(f"required worker is missing: {wrapper}")
+
+        self.tree_operations = [
+            TreeOperation(SKILL_SOURCE, self.codex_home / "skills" / "kimi-worker"),
+            TreeOperation(
+                KIMI_FRONTEND_SKILL_SOURCE,
+                self.kimi_code_home / "skills" / "codex-frontend-standards",
+            ),
+        ]
+        if self.args.skill_only:
+            self.file_operations = []
+            return
 
         install_root = self.codex_home / "kimi-dual-lane"
         adapter_target = install_root / "adapter" / "kimi-child-adapter.mjs"
@@ -225,10 +257,6 @@ class Installer:
                 0o600,
             ),
         ]
-        self.tree_operations = [
-            TreeOperation(SKILL_SOURCE, self.codex_home / "skills" / "kimi-worker")
-        ]
-
         if not self.args.skip_model_overlay:
             self.file_operations.append(
                 FileOperation(
@@ -309,8 +337,12 @@ class Installer:
         operation.target.parent.mkdir(parents=True, exist_ok=True)
         self.created_targets.append(operation.target)
         shutil.copytree(operation.source, operation.target)
-        wrapper = operation.target / "scripts" / "kimi-worker"
-        wrapper.chmod(0o755)
+        for executable in (
+            operation.target / "scripts" / "kimi-worker",
+            operation.target / "scripts" / "kimi-acp-client.mjs",
+        ):
+            if executable.is_file():
+                executable.chmod(0o755)
 
     def rollback(self) -> None:
         if self.args.dry_run:

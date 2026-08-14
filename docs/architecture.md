@@ -26,7 +26,9 @@ This is a compatibility bridge, not an authentication service. Both listener and
 
 ## Kimi Code lane
 
-The CLI wrapper unsets Platform API override variables so the official Kimi Code OAuth session remains authoritative. It launches one durable session and separates its outputs:
+The worker unsets Platform API override variables so the official Kimi Code OAuth session remains authoritative. Normal runs use Kimi Code's ACP stdio server; an explicit extra `--skills-dir` uses the CLI compatibility transport because ACP 0.23 cannot carry that override. Both launch one durable session and separate its outputs:
+
+For Kimi Code 0.36, ACP `session/prompt` goes through the same prompt-metadata service used by interactive and Web submission. The session therefore remains visible in Kimi Web while the Codex parent reads only bounded artifacts. The installer also places the portable frontend bridge in Kimi's normal user skill root so ACP sessions discover it without a per-run override.
 
 ```text
 run directory/
@@ -37,7 +39,7 @@ run directory/
 ├── session-id       durable Kimi session id
 ├── vis-command      kimi vis <same-session-id>
 ├── pid              worker process id
-└── metadata.json    cwd, model, effort, start time; no prompt
+└── metadata.json    cwd, model, effort, transport, start time; no prompt
 ```
 
 The parent model should do other non-overlapping work or one long tool-owned wait. Repeatedly importing progress events into the parent context adds cost without improving supervision.

@@ -30,6 +30,10 @@ The Codex harness is valuable when its plugins, MCP servers, skills, collaborati
 
 The human can watch the same Kimi session through `kimi vis`. The parent agent does not need the entire event trace in its context. On success, final response plus exact diff and tests are the high-signal review surface.
 
+### A durable session can still be hidden by Kimi Web
+
+In Kimi Code 0.36, the v2 print runner calls the prompt queue directly. It persists the session, messages, tools, and result but skips the prompt-metadata update used by interactive/Web submission. Kimi Web requests `exclude_empty=true`, so a real delegated session with no `last_prompt` is absent from its history list. The worker instead uses official ACP `session/prompt`, which reaches the metadata update without requiring a Web bearer token; session authority remains Kimi Code, while Codex still receives only bounded artifacts. Explicit extra skill-directory overrides retain a CLI compatibility path because ACP 0.23 cannot express them.
+
 ## 8. The collaboration policy must remain revisable
 
 Frontend skill is a useful prior, not a permanent routing law. Harness capabilities, quota economics, model behavior, and project needs change. Record observed strengths and failures, then update the decision rule from evidence.
