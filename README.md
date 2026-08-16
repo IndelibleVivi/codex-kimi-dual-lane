@@ -204,4 +204,22 @@ See [UPSTREAM.md](UPSTREAM.md) for provenance and the precise relationship to th
 
 This checkout is source-only. No package, release, hosted service, OAuth broker, or automatic updater is implied. The installer makes local files inspectable and leaves service/runtime activation explicit.
 
-The MIT license in [LICENSE](LICENSE) covers this repository's original code and documentation. Dependency and inspiration attribution remains in [UPSTREAM.md](UPSTREAM.md).
+Created by Faye & Cove. Faye
+([@IndelibleVivi](https://github.com/IndelibleVivi)) maintains the project and
+is the legal licensor for project-original material she controls. External
+contributors license their own contributions under the applicable target-file
+license.
+
+Beginning with version `0.2.0`, original functional materials are available
+under the [Sustainable Use License v1.0](LICENSE), while original
+documentation is available under
+[CC BY-NC-SA 4.0](LICENSE-DOCUMENTATION.md).
+
+This is source-available / fair-code distribution, not OSI open source.
+SUL-1.0 permits internal business use, but distributing or providing the
+covered functional materials to others for a fee or for commercial purposes
+is outside the public license; required notices must remain visible.
+
+See [LICENSING.md](LICENSING.md) for the exact path map,
+[LICENSE-HISTORY.md](LICENSE-HISTORY.md) for the previous MIT boundary, and
+[UPSTREAM.md](UPSTREAM.md) for dependency and inspiration attribution.

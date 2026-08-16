@@ -27,16 +27,24 @@ that upstream has merged or released either change.
 
 The original contribution here is the dual-lane orchestration, the loopback child compatibility adapter, portable installation/config generation, bounded Kimi Code artifact capture, human-visible same-session workflow, and the documented harness-selection contract.
 
-This repository's MIT license covers its original code and documentation. It does not alter the licenses or ownership of any dependency or referenced project.
+The repository's current licenses cover only original material identified in
+[LICENSING.md](LICENSING.md). They do not alter the licenses or ownership of
+any dependency or referenced project. Earlier revisions remain subject to the
+MIT boundary recorded in [LICENSE-HISTORY.md](LICENSE-HISTORY.md).
 
 ## Other community references
 
 - [`wangsiyi7/Codexkimi`](https://github.com/wangsiyi7/Codexkimi), MIT: Codex-led Kimi frontend workers and secure credential routing across macOS and Windows.
 - [`boringmarketer/kimi-first`](https://github.com/boringmarketer/kimi-first), MIT: frozen work-order delegation and parent-side adversarial review.
 - [`shinpr/sub-agents-skills`](https://github.com/shinpr/sub-agents-skills), MIT: portable cross-CLI subagent definitions and backend selection.
-- [`MoonshotAI/kimi-code`](https://github.com/MoonshotAI/kimi-code): the official Kimi Code CLI used by the native lane.
+- [`MoonshotAI/kimi-code`](https://github.com/MoonshotAI/kimi-code): the
+  official CLI/runtime dependency and OAuth/session authority for the
+  Kimi-native lane. Its source is not vendored; its own license and notices
+  govern it.
 
-These projects informed comparison and terminology. Their source is not copied into this repository.
+Codexkimi, kimi-first, and Sub-Agents Skills informed comparison and
+terminology. Kimi Code is an upstream runtime dependency. No source from these
+projects is copied into this repository.
 
 ## Product names
 

@@ -200,4 +200,19 @@ uv run --with pyyaml python \
 
 这个 checkout 只提供 source。它不包含或暗示 package、release、hosted service、OAuth broker 或自动 updater。installer 会让本地文件保持可检查，并明确地把 service/runtime activation 留给操作者决定。
 
-[LICENSE](LICENSE) 中的 MIT License 覆盖本 repo 的原创代码和文档。dependency 与灵感来源的 attribution 保留在 [UPSTREAM.md](UPSTREAM.md) 中。
+Created by Faye & Cove。Faye
+（[@IndelibleVivi](https://github.com/IndelibleVivi)）负责维护，并作为其所控制的
+项目原创材料的 legal licensor；外部贡献者仍按目标文件适用的 license
+授权其各自贡献。
+
+从 `0.2.0` 起，原创 functional materials 使用
+[Sustainable Use License v1.0](LICENSE)，原创 documentation 使用
+[CC BY-NC-SA 4.0](LICENSE-DOCUMENTATION.md)。
+
+这是 source-available / fair-code 分发，不是 OSI open source。SUL-1.0
+允许 internal business use，但不允许为了收费或商业目的向他人分发或提供
+covered functional materials；required notices 必须保持可见。
+
+逐路径范围见 [LICENSING.md](LICENSING.md)，旧 MIT 边界见
+[LICENSE-HISTORY.md](LICENSE-HISTORY.md)，dependency 与灵感来源的
+attribution 继续保留在 [UPSTREAM.md](UPSTREAM.md)。
